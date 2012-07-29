@@ -19,6 +19,8 @@ import java.awt.geom.Point2D;
 import org.jzy3d.demos.surface.OpenPolygon;
 import org.jzy3d.maths.Coord3d;
 
+import com.beust.jcommander.*;
+
 /**
  * Written By Aditya Gande, intern at Stanford University & Cupertino High School Student
  * Written in Summer 2012
@@ -34,6 +36,7 @@ import org.jzy3d.maths.Coord3d;
 
 public class HRMTDraft2 {
 	BufferedImage[] imageView = new BufferedImage[3]; // location 0 = topView, location 1 = lateralView, location 2 = frontViews
+	String[] imagePaths = new String[3];
 
 	//GUI related stuff
 	JFrame frame = new JFrame("Hull Reconstruction Method Utility");
@@ -53,13 +56,11 @@ public class HRMTDraft2 {
 	int screenWidth  = 0;
 	int screenHeight = 0;
 
-	//Three Views stored in String form
-	String topViewString, lateralViewString, frontViewString;
+	// Three Views stored in String form
+	// String topViewString, lateralViewString, frontViewString;
 
 	//Three Arrays used for image processing
-	int[][] topViewArray = null;
-	int[][] lateralViewArray = null;
-	int[][] frontViewArray = null;
+	int[][][] imageArrays = new int[3][][];
 
 	//Three ArrayLists used for finding coordinates of the body and wings
 	ArrayList<Point2D.Double> topViewCoordinates = new ArrayList<Point2D.Double>();
@@ -84,7 +85,10 @@ public class HRMTDraft2 {
 
 
 	/* Enter the file name to use this program with any file"*/
-	public HRMTDraft2() {
+	public HRMTDraft2(String topImagePath, String lateralImagePath, String frontImagePath) {
+		if (topImagePath != null) loadImage(new File(topImagePath), 0);
+		if (lateralImagePath != null) loadImage(new File(lateralImagePath), 1);
+		if (frontImagePath != null) loadImage(new File(frontImagePath), 2);
 
 		setupFrame();
 		frame.setJMenuBar(bar);
@@ -94,6 +98,8 @@ public class HRMTDraft2 {
 		frame.setBackground(Color.BLUE);
 		frame.add(container);
 	}
+
+	public HRMTDraft2() { this(null, null, null); }
 
 	//************Front end Code starts here**********//
 	public void setupFrame(){
@@ -120,6 +126,21 @@ public class HRMTDraft2 {
 		container.setBackground(Color.ORANGE);
 	}
 
+	public void loadImage(File file, int place) {
+		System.out.println("loading image into [" + place + "]");
+
+		try {
+			imageView[place] = ImageIO.read(file);
+			imageArrays[place] = convertTo2D(imageView[place]);
+			filterBody(imageArrays[place], place); // 1, 2, 3
+			imagePaths[place] = file.getPath();
+			System.out.println("view [" + place + "]: " + topViewCoordinates.size());
+		} catch(IOException i) {
+			System.out.println("error loading image");
+			System.out.println(i);
+		}
+	}
+
 	public void setupMenu(){
 
 		edgeDetection = new JMenuItem("Edge Detector");
@@ -139,15 +160,7 @@ public class HRMTDraft2 {
 			{
 				int ret = fileChooser.showOpenDialog(null);
 				if(ret == JFileChooser.APPROVE_OPTION){
-					File fileOne = fileChooser.getSelectedFile();
-					topViewString = fileOne.getPath();
-					try{
-						imageView[0] = ImageIO.read(fileOne);
-						topViewArray = convertTo2D(imageView[0]);
-						filterBody(topViewArray, 1);
-						System.out.println("topView: " + topViewCoordinates.size());
-					}
-					catch(IOException i){System.out.println(i);}
+					loadImage(fileChooser.getSelectedFile(), 0);
 				}
 			}
 		});
@@ -157,14 +170,7 @@ public class HRMTDraft2 {
 			{
 				int ret = fileChooser.showOpenDialog(null);
 				if(ret == JFileChooser.APPROVE_OPTION){
-					File fileTwo = fileChooser.getSelectedFile();
-					lateralViewString = fileTwo.getPath();
-					try{
-						imageView[1] = ImageIO.read(fileTwo);
-						lateralViewArray = convertTo2D(imageView[1]);
-						filterBody(lateralViewArray, 2);
-						System.out.println("lateralView: " + lateralViewCoordinates.size());
-					}catch(IOException i){System.out.println(i);}
+					loadImage(fileChooser.getSelectedFile(), 1);
 				}
 			}
 		});
@@ -173,17 +179,7 @@ public class HRMTDraft2 {
 			public void actionPerformed(ActionEvent e) {
 				int ret = fileChooser.showOpenDialog(null);
 				if (ret == JFileChooser.APPROVE_OPTION) {
-					File fileThree = fileChooser.getSelectedFile();
-					frontViewString = fileThree.getPath();
-					try {
-						imageView[2] = ImageIO.read(fileThree);
-						frontViewArray = convertTo2D(imageView[2]);
-						filterBody(frontViewArray, 3);
-						System.out.println("frontView: "
-							+ frontViewCoordinates.size());
-					} catch (IOException i) {
-						System.out.println(i);
-					}
+					loadImage(fileChooser.getSelectedFile(), 2);
 				}
 			}
 		});
@@ -246,33 +242,80 @@ public class HRMTDraft2 {
 				int blue = (image[i][j] >> 8) & 0xff;
 				int green = (image[i][j]) & 0xff;
 				if (red == 0 && blue == 0 && green == 0) {
-					if (n == 1)
+					if (n == 0)
 						topViewCoordinates.add(new Point2D.Double(j, i));
-					else if (n == 2)
+					else if (n == 1)
 						lateralViewCoordinates.add(new Point2D.Double(j, i));
-					else if (n == 3)
+					else if (n == 2)
 						frontViewCoordinates.add(new Point2D.Double(j, i));
 				}
 			}
 	}
 
+	private boolean filterAtPoint(int ix, int iy, int iz) {
+		int[] size = {
+			imageArrays[0].length,
+			imageArrays[0][0].length,
+			imageArrays[1][0].length};
+
+		// top red
+		int tr = (imageArrays[0][ix][iy] >> 16) & 0xff;
+		int tb = (imageArrays[0][ix][iy] >> 8) & 0xff;
+		int tg = (imageArrays[0][ix][iy]) & 0xff;
+
+		int lr = (imageArrays[1][size[2] -1- iz][size[0] -1- ix] >> 16) & 0xff;
+		int lb = (imageArrays[1][size[2] -1- iz][size[0] -1- ix] >> 8) & 0xff;
+		int lg = (imageArrays[1][size[2] -1- iz][size[0] -1- ix]) & 0xff;
+
+		int fr = (imageArrays[2][iy][size[2] -1- iz] >> 16) & 0xff;
+		int fb = (imageArrays[2][iy][size[2] -1- iz] >> 8) & 0xff;
+		int fg = (imageArrays[2][iy][size[2] -1- iz]) & 0xff;
+
+		return tr + tb + tg + lr + lb + lg + fr + fb + fg == 0;
+	}
+
 	//Determine the intersecting voxels of the three views
 	public void figureVoxels() {
 		start = dateFormat.format(cal.getTime());
+
+		/*
 		long commonCounter = 0;
 		for (int i = 0; i < topView3DCoordinates.size(); i++) {
 			Coord3d sample = topView3DCoordinates.get(i);
 			if (foundLateral(sample) == true && foundFront(sample) == true) {
 				commonCounter++;
-				System.out.println("Common Coordinate #" + commonCounter
-					+ " found");
+				System.out.println("Common Coordinate #" + commonCounter + " found");
 				commonCoordinates.add(sample);
 			}
 		}
-		System.out.println("topView3DCoordinates: "
-			+ topView3DCoordinates.size());
-		System.out.println("lateralView3DCoordinates: "
-			+ lateralView3DCoordinates.size());
+		*/
+
+		int[] size = {
+			imageArrays[0].length,
+			imageArrays[0][0].length,
+			imageArrays[1][0].length};
+
+		System.out.println(size[0]);
+		System.out.println(size[1]);
+		System.out.println(size[2]);
+
+		long commonCounter = 0;
+		// TODO: better dimensions calculation
+		for (int ix = 0; ix < size[0]; ix++)
+		for (int iy = 0; iy < size[1]; iy++)
+		for (int iz = 0; iz < size[2]; iz++) {
+			if (filterAtPoint(ix, iy, iz)) {
+				System.out.println("Common coordinate #" + commonCounter + " found.");
+				final float x = ix;
+				final float y = iy;
+				final float z = iz;
+				commonCoordinates.add(new Coord3d((float) x, (float) y, (float) z));
+				commonCounter++;
+			}
+		}
+
+		System.out.println("topView3DCoordinates: " + topView3DCoordinates.size());
+		System.out.println("lateralView3DCoordinates: " + lateralView3DCoordinates.size());
 		System.out.println("Figured out Voxels");
 		dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
 		cal = Calendar.getInstance();
@@ -283,10 +326,13 @@ public class HRMTDraft2 {
 	/*Load all the coordinates into the arrayList. Refer to notebook for more information
 	regarding the way I am doing this*/
 	public void addAllCoordinates(){
+		System.out.println("WARN: addAllCoordinates() has been disabled.");
+
+		/*
 		for(int i = 0; i < topViewCoordinates.size(); i++){
 			double x = 73 - topViewCoordinates.get(i).getX();
 			double y = topViewCoordinates.get(i).getY();
-			for(int z = 0; z < frontViewArray.length;z++){
+			for(int z = 0; z < imageArrays[2].length;z++){
 				topView3DCoordinates.add(new Coord3d((float)x, (float)y, (float)z));
 				//sampleCoordinates.add(new Coord3d((float)x, (float)y, (float)z));
 			}
@@ -294,7 +340,7 @@ public class HRMTDraft2 {
 		for(int i = 0; i < lateralViewCoordinates.size(); i++){
 			double y = 73 - lateralViewCoordinates.get(i).getX();
 			double z = 73 - lateralViewCoordinates.get(i).getY();
-			for(int x = 0; x < frontViewArray[0].length;x++){
+			for(int x = 0; x < imageArrays[2][0].length;x++){
 				lateralView3DCoordinates.add(new Coord3d((float)x,(float)y, (float)z));
 				//sampleCoordinates.add(new Coord3d((float)x, (float)y, (float)z));
 			}
@@ -302,7 +348,7 @@ public class HRMTDraft2 {
 		for(int i = 0; i < frontViewCoordinates.size(); i++){
 			double x = 73 - frontViewCoordinates.get(i).getX();
 			double z = 73 - frontViewCoordinates.get(i).getY();
-			for(int y = 0; y < topViewArray.length; y++){
+			for(int y = 0; y < imageArrays[0].length; y++){
 				frontView3DCoordinates.add(new Coord3d((float)x, (float)y, (float)z));
 				//sampleCoordinates.add(new Coord3d((float)x, (float)y, (float)z));
 			}
@@ -310,7 +356,7 @@ public class HRMTDraft2 {
 		System.out.println("topView3DCoordinates: " + topView3DCoordinates.size());
 		System.out.println("lateralView3DCoordinates: " + lateralView3DCoordinates.size());
 		System.out.println("frontView3DCoordinates: " + frontView3DCoordinates.size());
-
+		*/
 	}
 
 	public boolean foundLateral(Coord3d coord) {
@@ -344,75 +390,75 @@ public class HRMTDraft2 {
 			final int pixelLength = 4;
 			for (int pixel = 0, row = 0, col = 0; pixel < pixels.length; pixel += pixelLength) {
 				int argb = 0;
-			argb += (((int) pixels[pixel] & 0xff) << 24); // alpha
-			argb += ((int) pixels[pixel + 1] & 0xff); // blue
-			argb += (((int) pixels[pixel + 2] & 0xff) << 8); // green
-			argb += (((int) pixels[pixel + 3] & 0xff) << 16); // red
-			result[row][col] = argb;
-			col++;
-			if (col == width) {
-				col = 0;
-				row++;
+				argb += (((int) pixels[pixel] & 0xff) << 24); // alpha
+				argb += ((int) pixels[pixel + 1] & 0xff); // blue
+				argb += (((int) pixels[pixel + 2] & 0xff) << 8); // green
+				argb += (((int) pixels[pixel + 3] & 0xff) << 16); // red
+				result[row][col] = argb;
+				col++;
+				if (col == width) {
+					col = 0;
+					row++;
+				}
+			}
+		} else {
+			final int pixelLength = 3;
+			for (int pixel = 0, row = 0, col = 0; pixel < pixels.length; pixel += pixelLength) {
+				int argb = 0;
+				argb += -16777216; // 255 alpha
+				argb += ((int) pixels[pixel] & 0xff); // blue
+				argb += (((int) pixels[pixel + 1] & 0xff) << 8); // green
+				argb += (((int) pixels[pixel + 2] & 0xff) << 16); // red
+				result[row][col] = argb;
+				col++;
+				if (col == width) {
+					col = 0;
+					row++;
+				}
 			}
 		}
-	} else {
-		final int pixelLength = 3;
-		for (int pixel = 0, row = 0, col = 0; pixel < pixels.length; pixel += pixelLength) {
-			int argb = 0;
-			argb += -16777216; // 255 alpha
-			argb += ((int) pixels[pixel] & 0xff); // blue
-			argb += (((int) pixels[pixel + 1] & 0xff) << 8); // green
-			argb += (((int) pixels[pixel + 2] & 0xff) << 16); // red
-			result[row][col] = argb;
-			col++;
-			if (col == width) {
-				col = 0;
-				row++;
+
+		return result;
+	}
+
+	public Coord3d[] returnAllCoordinates(){
+		Coord3d[] temp = new Coord3d[allCoordinates.size()];
+		for(int i = 0; i < allCoordinates.size(); i++){
+			temp[i] = allCoordinates.get(i);
+		}
+		return temp;
+	}
+
+	public Coord3d[] returnCommonCoordinates() {
+		Coord3d[] temp = new Coord3d[commonCoordinates.size()];
+		for (int i = 0; i < commonCoordinates.size(); i++) {
+			temp[i] = commonCoordinates.get(i);
+		}
+		return temp;
+	}
+
+	public Coord3d[] returnSampleCoordinates() {
+		Coord3d[] temp = new Coord3d[sampleCoordinates.size()];
+		for (int i = 0; i < sampleCoordinates.size(); i++) {
+			temp[i] = sampleCoordinates.get(i);
+		}
+		return temp;
+	}
+
+	public int surround(int y, int x, int[][] image){
+		int counter = 0;
+		for(int i = y - 1; i <= y+1; i++)
+			for(int j = x -1; j <= x+1; j++){
+				try{
+					if(image[i][j] == -16777216)
+						counter++;
+				}catch(Exception e){;}
 			}
+
+			if(image[y][x] == -16777216)
+				counter--;
+			return counter;
 		}
-	}
-
-	return result;
-}
-
-public Coord3d[] returnAllCoordinates(){
-	Coord3d[] temp = new Coord3d[allCoordinates.size()];
-	for(int i = 0; i < allCoordinates.size(); i++){
-		temp[i] = allCoordinates.get(i);
-	}
-	return temp;
-}
-
-public Coord3d[] returnCommonCoordinates() {
-	Coord3d[] temp = new Coord3d[commonCoordinates.size()];
-	for (int i = 0; i < commonCoordinates.size(); i++) {
-		temp[i] = commonCoordinates.get(i);
-	}
-	return temp;
-}
-
-public Coord3d[] returnSampleCoordinates() {
-	Coord3d[] temp = new Coord3d[sampleCoordinates.size()];
-	for (int i = 0; i < sampleCoordinates.size(); i++) {
-		temp[i] = sampleCoordinates.get(i);
-	}
-	return temp;
-}
-
-public int surround(int y, int x, int[][] image){
-	int counter = 0;
-	for(int i = y - 1; i <= y+1; i++)
-		for(int j = x -1; j <= x+1; j++){
-			try{
-				if(image[i][j] == -16777216)
-					counter++;
-			}catch(Exception e){;}
-		}
-
-		if(image[y][x] == -16777216)
-			counter--;
-		return counter;
-	}
 
 
 	//returns false is closer to white, returns true if closer to black
@@ -432,17 +478,20 @@ public int surround(int y, int x, int[][] image){
 		}
 	}
 
-
+	/*
 	public BufferedImage openImage (String ImageName) throws IOException {
 		 // open image
 		File imgPath = new File(ImageName);
 		BufferedImage bufferedImage = ImageIO.read(imgPath);
 		return bufferedImage;
 	}
+	*/
 
 	/*Main Method for executing the sub-methods of this class*/
 	public static void main(String[] args){
-		HRMTDraft2 test = new HRMTDraft2();
+		CLSettings cla = new CLSettings();
+		new JCommander(cla, args);
+		new HRMTDraft2(cla.topImagePath, cla.lateralImagePath, cla.frontImagePath);
 	}
 
 	private class InfoPanel extends JPanel{
@@ -458,5 +507,16 @@ public int surround(int y, int x, int[][] image){
 		public MediaPanel(){
 			this.setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
 		}
+	}
+
+	private static class CLSettings {
+		@Parameter(names = "-dt", description = "top image path")
+		public String topImagePath;
+
+		@Parameter(names = "-dl", description = "lateral image path")
+		public String lateralImagePath;
+
+		@Parameter(names = "-df", description = "front image path")
+		public String frontImagePath;
 	}
 }

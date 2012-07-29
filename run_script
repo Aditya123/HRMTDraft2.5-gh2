@@ -5,6 +5,7 @@ CLASSPATH=$CLASSPATH:$BUILDDIR
 CLASSPATH=$CLASSPATH:./lib/gluegen-rt-natives-macosx-universal.jar
 CLASSPATH=$CLASSPATH:./lib/gluegen-rt-natives-windows-amd64.jar
 CLASSPATH=$CLASSPATH:./lib/gluegen-rt.jar
+CLASSPATH=$CLASSPATH:./lib/jcommander.jar
 CLASSPATH=$CLASSPATH:./lib/jogl-all-natives-macosx-universal.jar
 CLASSPATH=$CLASSPATH:./lib/jogl-all-natives-windows-amd64.jar
 CLASSPATH=$CLASSPATH:./lib/jogl.all.jar
