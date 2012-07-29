@@ -15,4 +15,4 @@ CLASSPATH=$CLASSPATH:./lib/swt-debug.jar
 CLASSPATH=$CLASSPATH:./lib/swt.jar
 CLASSPATH=$CLASSPATH:./lib/vecmath-1.3.1.jar
 
-java -cp $CLASSPATH HRMTDraft2
+java -cp $CLASSPATH HRMTDraft2 $@
